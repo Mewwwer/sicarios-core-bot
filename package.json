@@ -8,7 +8,8 @@
     "node": ">=20.19.0"
   },
   "scripts": {
-    "start": "node --env-file=.env src/bot.mjs",
+    "start": "node src/bot.mjs",
+	"start:local": "node --env-file=.env src/bot.mjs",
     "deploy": "node --env-file=.env src/deploy.mjs",
     "check": "node --check src/config.mjs && node --check src/roles.mjs && node --check src/panel.mjs && node --check src/commands.mjs && node --check src/bot.mjs && node --check src/deploy.mjs"
   },
