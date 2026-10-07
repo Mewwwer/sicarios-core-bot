@@ -12,11 +12,11 @@ First live automation layer for the SICARIOS Discord server.
 - Onboarding commands are accepted from **Leader, Deputy or Marshal** (the server owner is also allowed). `/remove` adds extra protection: Marshal cannot remove Leadership, and Deputy cannot remove a Leader.
 - Administrative actions are written to `#log-bota-bot-log` when the bot can access it.
 
-This bot does **not** implement attack monitoring yet.
+Optional alliance attack monitoring is implemented but disabled by default. It reuses this Discord client and a separate read-only Python collector, with no database. See [attack monitor configuration and Northflank deployment](docs/ATTACK_MONITOR.md).
 
 ## Important: this is a running bot
 
-Unlike the one-shot Setup Tool, this process must be online for buttons and slash commands to work. For initial testing, keeping the terminal open on your PC is enough. We can decide on 24/7 hosting later.
+Unlike the one-shot Setup Tool, this process must be online for buttons and slash commands to work. The production bot runs on Northflank from `main`; pushes to `main` automatically build and redeploy. Keep proposed changes on a separate branch until reviewed.
 
 ## Reuse the existing Discord application
 
@@ -61,9 +61,13 @@ Guild commands normally appear quickly because they are registered directly to S
 
 ## Start the bot
 
+Locally, with `.env`:
+
 ```powershell
-npm start
+npm run start:local
 ```
+
+In Northflank, where runtime environment variables are already supplied, use `npm start`.
 
 Expected startup output:
 
@@ -216,3 +220,14 @@ Fixed sequential role mutation races in `/accept` and `/promote`. The bot now re
 
 ## v1.3 fix
 Synchronizace jazykových access rolí nyní po odebrání starých Recruit/Member Access rolí vždy znovu načte člena z Discord API před přidáním nových rolí. Tím se odstraní race condition, která mohla po `/promote` ponechat starý Recruit Access.
+
+
+## Attack monitor v0.1
+
+- Disabled unless `ATTACK_MONITOR_ENABLED=true`; alert pings remain off unless `ATTACK_DRY_RUN=false`.
+- Python collector reads alliance attack announcements through pinned EmpireCore; it performs no defense or game actions.
+- Authenticated HTTP delivers bilingual cards through the existing Discord client.
+- Duplicate IDs and pending retries exist only in RAM; process restarts may repeat active alerts.
+- Deployment uses this Core and one collector service in the same Northflank project.
+
+Configuration: [docs/ATTACK_MONITOR.md](docs/ATTACK_MONITOR.md). Validation and remaining live checks: [docs/ATTACK_MONITOR_VALIDATION.md](docs/ATTACK_MONITOR_VALIDATION.md). Run `npm run check` and `npm test` for Node checks; Python and cross-language test commands are in the monitor guide.

@@ -8,6 +8,7 @@ import {
 import { BUTTON_IDS, CATEGORIES, CHANNELS, ROLE_NAMES } from './config.mjs';
 import { handleCommand } from './commands.mjs';
 import { ensureRolePanel } from './panel.mjs';
+import { startAttackMonitor } from './attack-monitor.mjs';
 import {
   activeLanguageLabel,
   resolveRoles,
@@ -23,6 +24,7 @@ if (!TOKEN || !GUILD_ID) {
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const attackMonitor = await startAttackMonitor(client);
 
 async function getGuild() {
   return client.guilds.fetch(GUILD_ID);
@@ -148,15 +150,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-process.on('SIGINT', async () => {
-  console.log('\n[SHUTDOWN] Closing Discord connection...');
-  client.destroy();
-  process.exit(0);
-});
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('\n[SHUTDOWN] Closing attack monitor and Discord connection...');
+  try {
+    await attackMonitor?.close();
+    await client.destroy();
+    process.exit(0);
+  } catch (error) {
+    console.error('[SHUTDOWN] Failed:', error);
+    process.exit(1);
+  }
+}
 
-process.on('SIGTERM', async () => {
-  client.destroy();
-  process.exit(0);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 await client.login(TOKEN);
