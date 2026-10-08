@@ -117,3 +117,9 @@ Metadata jednotek knihovna může cacheovat na dočasném disku. Jde o veřejná
 - Northflank private networking: https://northflank.com/docs/v1/application/network/configure-ports
 - Northflank health checks: https://northflank.com/docs/v1/application/observe/configure-health-checks
 - Aktuální SICARIOS Core v1.3: https://github.com/Mewwwer/sicarios-core-bot/tree/251f9c46f86fb2dc8bfc81b5bb91aa0686194301
+
+## Rozšíření v0.2
+
+Čtecí příkazy mají samostatné snapshoty `/v2/state` a experimentální `/v2/defense`.
+V1 alerty a heartbeat zůstávají kompatibilní; nové cache neovlivňují `seen` ani readiness feedu.
+Viz [GAME_COMMANDS.md](GAME_COMMANDS.md) pro kontrakt, limity a postupný uživatelský pilot.

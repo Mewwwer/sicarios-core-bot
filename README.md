@@ -231,3 +231,18 @@ Synchronizace jazykových access rolí nyní po odebrání starých Recruit/Memb
 - Deployment uses this Core and one collector service in the same Northflank project.
 
 Configuration: [docs/ATTACK_MONITOR.md](docs/ATTACK_MONITOR.md). Validation and remaining live checks: [docs/ATTACK_MONITOR_VALIDATION.md](docs/ATTACK_MONITOR_VALIDATION.md). Run `npm run check` and `npm test` for Node checks; Python and cross-language test commands are in the monitor guide.
+
+## Alianční čtecí příkazy v0.2 (opt-in)
+
+`/online [stranka]` čte čerstvý přehled členů ve hře a rozlišuje online, offline a unknown.
+`/utoky [stranka]` čte aktuální alianční útoky, nezávisle na RAM deduplikaci alertů.
+Experimentální `/obrana hrac` měří pouze hlavní hrad jiného současného člena ve Velké říši;
+neprovádí žádné herní akce. Chybějící údaje jsou unknown, nikoli naměřené nuly.
+
+Nové funkce jsou výchozím nastavením vypnuté. Přehledy zapíná `GAME_COMMANDS_ENABLED`,
+obranu navíc `DEFENSE_LOOKUP_ENABLED`, vždy na Core i collectoru. Registrace zůstává ruční:
+`node src/deploy.mjs` v Core Shellu s již nastaveným prostředím. Restart příkazy neregistruje.
+
+[Architektura, konfigurace a přesný pilot v0.2](docs/GAME_COMMANDS.md) ·
+[Skutečné offline výsledky a neověřené body](docs/GAME_COMMANDS_VALIDATION.md).
+Dosavadní živé výsledky v0.1 se nepovažují za ověření těchto nových funkcí.
