@@ -49,7 +49,7 @@ export function renderOverview(state, kind, page = 1, now = Date.now() / 1000) {
   if (kind === 'members') {
     const offline = data.items.filter((m) => m.online_state === 'offline').length;
     return { embeds: [{ title: 'Online ve hře / Online in game', description: [
-      section.partial ? warning : '', current.map((m) => safe(m.name)).join('\n') || 'Nikdo z členů s dostupným stavem není online / No members with known status are online.',
+      section.partial ? warning : '', current.map((m) => safe(m.name, 80)).join('\n') || 'Nikdo z členů s dostupným stavem není online / No members with known status are online.',
       `Online ${online.length} · Offline ${offline} · Unknown ${data.count - online.length - offline} · Celkem / Total ${data.count}`, footer,
     ].filter(Boolean).join('\n\n') }] };
   }
@@ -108,7 +108,7 @@ export function createGameHandler(config, state, { rolesResolver = resolveRoles,
       if (autocomplete) {
         const s = state.get('members');
         const text = fold(i.options.getFocused());
-        const choices = s.status === 'fresh' && !s.partial ? s.value.items.filter((m) => fold(m.name).includes(text)).sort((a, b) => a.name.localeCompare(b.name, 'cs') || a.player_id - b.player_id).slice(0, 25).map((m) => ({ name: [...m.name].slice(0, 75).join(''), value: String(m.player_id) })) : [];
+        const choices = s.status === 'fresh' && !s.partial ? s.value.items.filter((m) => fold(m.name).includes(text)).sort((a, b) => a.name.localeCompare(b.name, 'cs') || a.player_id - b.player_id).slice(0, 25).map((m) => ({ name: `${[...m.name].slice(0, 35).join('')}${[...m.name].length > 35 ? '…' : ''} · ${m.player_id}`, value: String(m.player_id) })) : [];
         await i.respond(choices); return true;
       }
       if (!cooldowns.take(`${i.user.id}:${i.commandName === 'obrana' ? 'defense' : 'read'}`, i.commandName === 'obrana' ? 15 : 3)) {

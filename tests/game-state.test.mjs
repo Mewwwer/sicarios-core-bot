@@ -63,6 +63,10 @@ test('overview distinguishes missing, unknown, partial, elapsed attacks, escaped
   assert.ok(rendered.embeds[0].description.length < 4096);
   assert.match(rendered.embeds[0].description, /Unknown 1/);
   assert.match(renderOverview(s, 'members', 4).content, /Invalid page/);
+  assert.ok(renderOverview(s, 'members', 2).embeds[0].description.length <= 4096);
+  s.partial.members = true;
+  assert.ok(renderOverview(s, 'members', 2).embeds[0].description.length <= 4096);
+  s.partial.members = false;
   const attacks = renderOverview(s, 'attacks').embeds[0].fields;
   assert.match(attacks[0].value, /Past expected arrival/); assert.match(attacks[2].value, /Arrival unknown/);
   assert.equal(attacks.length, 3);
@@ -112,6 +116,10 @@ test('Discord uses fresh roles and applies guild/channel/role/flag checks to com
   for (const rank of Object.keys(roles)) { const i = interaction({ rank, id: rank }); await handler(i); assert.equal(i.calls[0][1].flags, 64); assert.deepEqual(i.calls[1][1].allowedMentions.parse, []); assert.ok(i.calls[1][1].embeds); }
   const owner = interaction({ rank: 'recruit', id: 'owner' }); await handler(owner); assert.ok(owner.calls[1][1].embeds);
   const a = interaction({ auto: true, command: 'obrana' }); await handler(a); assert.equal(a.calls[0][1][0].value, '1');
+  const longNames = new GameState(config, () => 1000); longNames.accept(envelope({ members: section([member(1, '😀'.repeat(200))]) }));
+  const long = interaction({ auto: true, command: 'obrana' });
+  await createGameHandler(config, longNames, { rolesResolver: async () => roles, clock: () => 1000 })(long);
+  assert.ok(long.calls[0][1][0].name.length <= 100);
   const disabled = createGameHandler({ ...config, defense: false }, s, { rolesResolver: async () => roles });
   const i = interaction({ command: 'obrana' }); await disabled(i); assert.match(i.calls[1][1].content, /disabled/);
   // Simulate revocation: a subsequent fetch returns Recruit, even with an
