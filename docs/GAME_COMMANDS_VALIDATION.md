@@ -1,30 +1,76 @@
 # Ověření SICARIOS v0.2 — 8. 10. 2026
 
-Implementovaný a offline ověřený runtime: `320fa73f9f172432e96749981cefc346239f7f4a`.
+Implementovaný a offline ověřený runtime: `ca7452a47fb198709b2f0e34c334646c3e1fda20`.
 Následující dokumentační commit nemění runtime. Výchozí main:
 `4f82d9efacd9e236bb607fbc69e329c7d41197ef`. Větev `codex/alliance-read-commands-v0.2`.
 Původní pracovní adresář na větvi `work` zůstal čistý; změny mají vlastní worktree.
 Nebyl nalezen žádný platný AGENTS.md v repozitáři ani nadřazených adresářích.
 
+Pokračování existujícího draft PR #2 z `066e09737ec30a8f532b9665b26db81de3cf0a16`.
+Živý pilot /obrana již proběhl u uživatele a odhalil nesoulad; výsledky níže jsou nové
+**offline** kontroly opravy a diagnostiky. Codex do hry ani Discordu nevstoupil.
+
+## Doložený nesoulad a závěr pro obranu
+
+Uživatel potvrzuje nezměněný stav a stejné výsledky při opakovaném novém lookupu cíle
+KrakenQ / Hrad KrakenQ / hlavní hrad Velké říše / 574:528.
+
+| Pole | Bot v pilotu | Herní dialog / screenshot |
+|---|---|---|
+| Kapacita hradeb | 8998 | 9180 |
+| Vojáci na hradbách | 12128 | 12374 |
+| Vlevo, ID → počet | 489 → 744, 227 → 2894, 238 → 1213 | Screenshot levé pozice není doložen |
+| Střed, ID → počet | 489 → 759, 227 → 2953, 238 → 3565 | Viditelné počty 3638, 765, 3021; přesné přiřazení screenshotových ikon k ID není doložené |
+| Vpravo | Pouze nástroje | Screenshot pravé pozice není doložen |
+| UYL / AUYL | 1029100 / 286100 | Nádvoří bez aliance 743000; aliance 286100 |
+
+**Potvrzená chyba a oprava:** UYL nebylo samotné nádvoří. Připnutý
+`GetSupportDefenseResponse.yard_limit` výslovně zahrnuje alianční část; také
+`KeepDefense.keep_unit_slot_count` je UYL − AUYL. Discord nově ukazuje nádvoří bez aliance,
+kapacitu alianční podpory a celkovou kapacitu. Odvození jen při explicitních konzistentních
+hodnotách. Pro uvedené UYL/AUYL vychází 743000; nejde o konstantu zadanou do runtime.
+
+**Nepotvrzená příčina:** rozdíl UWL a S. S se parsuje jako ID/počet v pořadí
+left/middle/right/keep/stronghold/support/reserve; kladná celá čísla se v připnutém parseru
+ani naší normalizaci/renderingu nenásobí a nepřepočítávají. Původní šest uvedených počtů
+dává 12128, nástroje vpravo se do tohoto součtu nepočítají. Knihovní
+`get_total_defenders()` sčítá celé S včetně nástrojů; implementace ho nepoužívá. Synthetic
+regrese s uvedenými počty prokazuje přenos, **není zachyceným živým paketem SDI** a
+nedokazuje shodu zdroje s dialogem. Žádný koeficient ani hardcode 9180/12374 nebyl přidán.
+
+Screenshot říká „Špionáž brány (50 sekundy zpátky)“. AS původní odpovědi SDI nemáme.
+AS knihovna dokumentuje jako stáří špionážního zdroje, ale SDI model ho má pouze v extras.
+Nově se zachovává validní AS a zobrazuje stáří **při načtení**. fetched_at/observed_at jsou
+čas přijetí odpovědi, nikdy potvrzený čas měření. TTL/cache ani opakované načtení
+nezaručují obnovu zdrojového stavu. Stáří AS nebo rozdílný kontext podpory/špionáže zatím
+nejsou prokázaným vysvětlením rozdílu. Z AS neodvozujeme potvrzený absolutní čas měření.
+
+Omezená diagnostika je default false, collector-only `DEFENSE_DIAGNOSTICS_ENABLED`.
+Nejvýše 5 nových SDI pokusů za proces, 16 KiB na řádek, 3 pozice hradeb × 20 řádků,
+jen whitelisted AS/UWL/UYL/AUYL/S a ověřený numerický request kontext. Porovnává wire,
+model a normalized; žádný celý paket/gui/gli/credentials/shared secret ani nový endpoint.
+`accepted` označuje přijetí workerem, ne potvrzení doručení Discordu či identity SDI cíle.
+Chyba/pozdní výsledek dál vyvolá karanténu. Příčina se do získání diagnostiky označuje
+**nevyřešená**, hodnoty v Discordu **neověřené proti hernímu dialogu**.
+
 ## Skutečné offline výsledky
 
 | Kontrola | Výsledek |
 |---|---|
-| `npm test` | **28 Node testů prošlo**, 0 fail, 0 skipped |
-| Python unittest discovery | **31 Python testů prošlo**, 0 fail, žádný přeskočený |
-| Celkem odlišných testů na hostu | **59**, včetně původních 30 regresí |
+| `npm test` | **30 Node testů prošlo**, 0 fail, 0 skipped |
+| Python unittest discovery | **41 Python testů prošlo**, 0 fail, žádný přeskočený |
+| Celkem odlišných testů na hostu | **71**, včetně původních 30 regresí |
 | `npm run check` | Syntax všech stávajících i nových JS modulů prošla |
 | Python compileall (`collector scripts tests`) | Prošlo |
 | `pip check` | `No broken requirements found.` |
-| `npm ci` s existujícím lockfile | Prošlo; závislosti/lockfile nezměněné |
-| Instalace Python requirements | Prošla; připnutý EmpireCore 0.49.0 zachován |
+| Závislosti | Instalace ověřené v předchozí iteraci; tento follow-up je nemění, Docker dependency vrstvy cache hit; EmpireCore 0.49.0 zachován |
 | `git diff --check` | Prošlo |
 | Core Docker build (`deploy/Core.Dockerfile`, context `/`) | Úspěšný |
 | Collector Docker build (`collector/Dockerfile`, context `/`) | Úspěšný |
-| Core obraz, `--network none`, UID **1000** | **28 testů prošlo** |
-| Collector obraz, `--network none`, UID **10001** | **28 testů prošlo** |
+| Core obraz, `--network none`, UID **1000** | **30 testů prošlo** |
+| Collector obraz, `--network none`, UID **10001** | **38 testů prošlo** |
 
-Testy v obrazech opakují odpovídající host testy; nejsou přičítány k 59 odlišným testům.
+Testy v obrazech opakují odpovídající host testy; nejsou přičítány k 71 odlišným testům.
 Collector obraz nemá Node, proto v něm běžel výslovně vybraný Python subset bez dvou
 Python→Node integračních testů a jednoho Core→collector command harness testu. Všechny tři
 prošly na hostu. Testovací soubory byly připojené read-only, bez skutečných credentials;
@@ -36,8 +82,8 @@ Host: Linux, Node **24.19.0**, Python **3.12.14**. Sestavené tagy `sicarios-cor
 a `sicarios-collector:v0.2` vycházejí z původních Node 24 / Python 3.12 Dockerfiles.
 Lokální finální image IDs (nepublikované do registry):
 
-- Core: `sha256:02d18ff8c8dbac022f3fbd80f89694f31309324db45e6137e27f1d2c0150a5f7`
-- Collector: `sha256:c81920745e439cfe23b76709576c02955bc105680e83bb68925c28df75091a77`
+- Core: `sha256:a7214d29c9765fd4615f1f99ff539a1a0ab74dd1beb8f8e12d8616ffa3e55971`
+- Collector: `sha256:d6698980dfe074e7654e72818149534d9b42cd6f97d048710608fcc135a350a6`
 
 Buildy používají volitelný BuildKit `proxy_ca` mount systémové CA při dependency instalaci,
 `NODE_EXTRA_CA_CERTS` / `PIP_CERT` a zapnuté TLS ověřování. Session CA se neukládá do image
@@ -75,6 +121,17 @@ neprivilegovaní uživatelé a cloud start `npm start` zůstávají zachované.
 - Python fake collector → skutečné HTTP → Node state/cache a mock Discord sink;
   Node `/obrana` handler → skutečné HTTP → Python fake game SDI → ephemeral mock Discord reply.
   Core po timeoutu neposílá automatický druhý požadavek.
+- UYL/AUYL přítomnost/nekonzistence/explicitní nula, stejné vykreslení staršího DTO,
+  odmítnutí chybného odvození a fetched_at/AS, zachování uvedených S počtů bez korekce.
+- Reálné metody připnutého `EmpireClient.request_packet` i `request` nad falešnou connection:
+  stejný session frame, command `sdi`, timeout a waiter `accepts=None`. Žádná druhá relace.
+- Diagnostika vypnutá ve výchozím stavu, config závislost na defense flagu, whitelist bez
+  tajemství/GUI/Gli/SCID, limity a cache hity, všechny tři stupně hodnot. Logging failure
+  nemění výsledek ani karanténu; malformed S/error packet a výsledek přes reconnect se
+  nepublikují. Attack refresh/heartbeat/ready pokračují i při enabled diagnostice.
+- Ruční offline mezní rendering: sedm maximálních pozic, dlouhá escapovaná jména,
+  maximální safe integer a nekonzistentní kapacita → description 1383 a embed součet
+  5749 znaků, pod Discord limity 4096/6000 (pole nejvýše 604, pod 1024).
 
 Simulované chyby záměrně produkují warning logy (`TimeoutError`, odmítnuté snapshoty,
 parser/publisher failure). Finální Python běh s `-W error::ResourceWarning` prošel;
@@ -100,15 +157,16 @@ blokující problém v offline ověřitelném rozsahu; nejde o živé ověření
 - Reálná dostupnost a význam AMI/login_activity pro SICARIOS WORLD 2 a změny login/logout.
 - Aktuální get_announced_attacks, cíl/ID/svět/dopad a přesnost velikostí vůči hernímu klientovi;
   průběh odebrání položek po úplném snapshotu a doručení do současného attack kanálu.
-- Dostupnost SDI S/UWL/UYL/AUYL/B na dvou známých hlavních hradech; skutečná ID/metadatová
-  klasifikace, kapacity a kastelán ve screenshotovém porovnání. AUYL není garantované volné místo.
+- Shoda SDI S/UWL s dialogem: na KrakenQ je doložený nesoulad, na druhém hlavním hradu
+  srovnání chybí. Živé AS a diagnostická cesta před/po parseru dosud nezachycené;
+  skutečná ID/metadatová klasifikace a kastelán vyžadují porovnání. AUYL není garantované volné místo.
 - Skutečná identita/stabilita cíle při SDI. Profily před/po lookupu kontrolují stabilitu,
   neuzamykají mapu atomicky. Při nesouladu vypni defense; nepředstírej ověřený audit.
 - Přirozený reconnect/karanténa na reálné relaci, latence 12/15 s a dlouhodobé RAM/CPU.
 - Live slash registrace, ephemeral viditelnost, autocomplete, role removal, interní kanál,
   jazyková tlačítka a ruční Northflank build/probes bez překryvu relací.
 
-Obrana zůstává **experimentální, živě neověřená a default false**. Přehledy mají samostatný
+Obrana zůstává **experimentální, se živě doloženým nesouladem a default false**. Přehledy mají samostatný
 flag a lze je provozovat s defense vypnutou. Žádná skutečná game/Discord credentials nebyla
 potřebná, Northflank ani live registrace se neměnily, nic nebylo mergováno. Historické výsledky
 v0.1 jsou v `ATTACK_MONITOR_VALIDATION.md`; nejsou důkazem v0.2.
@@ -137,10 +195,17 @@ V tomto managed prostředí Docker používá explicitně lokální socket a zap
 secret volitelný. Tests používají syntetické identity/tajemství a loopback HTTP; instalace
 závislostí a pull základních obrazů mohou potřebovat síť, herní/Discord přístup ne.
 
-## Ruční pilot — zatím neproveden
+## Další ruční pilot — diagnostika příčiny dosud neprovedena
 
 Přesný postup včetně env, postupného nasazení Core proti starému collectoru, Pause → 0
 instancí → build → Resume, ruční registrace 5/6 commands a rollbacku je v
 [GAME_COMMANDS.md](GAME_COMMANDS.md#uživatelský-pilot-na-northflanku--ruční).
 Po pilotu doplň ověřený commit, jednotlivé výsledky a zbývající rozdíly. Merge až na další
 explicitní pokyn uživatele.
+
+Pro navazující šetření /obrana použij
+[přesný diagnostický pilot](GAME_COMMANDS.md#diagnostický-pilot-nesouladu-obrany): pouze
+collector navíc `DEFENSE_DIAGNOSTICS_ENABLED=true`, dvě nová načtení s odstupem ≥31 s,
+export jen prefixových JSON řádků a porovnání stejných pozic/dialogu včetně UTC času,
+AS a commitu. Po sběru flag false; při přetrvávajícím nesouladu obranu vypni nebo ji
+používej pouze jako explicitně neověřený experiment. Live údaje dodá uživatel.

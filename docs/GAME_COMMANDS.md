@@ -243,7 +243,8 @@ přirozenou novou relaci. Opakovaný refresh stejné relace karanténu nikdy neu
 ## Uživatelský pilot na Northflanku — ruční
 
 Codex tímto postupem nenastavuje Northflank, neregistruje live Discord commands a nevstupuje
-do hry. Main a živé služby zůstávají v0.1 do tvého vědomého zahájení pilotu.
+do hry. Tento úvodní postup je pro první zapnutí v0.2; pokud již pilot běží,
+navazující šetření nesouladu je v diagnostickém pilotu výše. Nasazení řídí uživatel.
 
 1. Použij commit draft PR z `codex/alliance-read-commands-v0.2`. Nejprve ručně sestav/nasaď
    nový **Core** s `GAME_COMMANDS_ENABLED=false`, `DEFENSE_LOOKUP_ENABLED=false`.
