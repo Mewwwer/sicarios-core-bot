@@ -20,6 +20,10 @@ class Settings:
     health_port: int = 8081
     max_pending: int = 1000
     client_version: str | None = None
+    game_commands_enabled: bool = False
+    defense_lookup_enabled: bool = False
+    members_poll_seconds: int = 60
+    defense_diagnostics_enabled: bool = False
 
     @classmethod
     def from_env(cls, env=None):
@@ -54,6 +58,10 @@ class Settings:
         secret = required('ATTACK_SHARED_SECRET')
         if len(secret) < 32:
             raise ValueError('ATTACK_SHARED_SECRET must have at least 32 characters')
+        if env.get('DEFENSE_LOOKUP_ENABLED') == 'true' and env.get('GAME_COMMANDS_ENABLED') != 'true':
+            raise ValueError('DEFENSE_LOOKUP_ENABLED requires GAME_COMMANDS_ENABLED')
+        if env.get('DEFENSE_DIAGNOSTICS_ENABLED') == 'true' and env.get('DEFENSE_LOOKUP_ENABLED') != 'true':
+            raise ValueError('DEFENSE_DIAGNOSTICS_ENABLED requires DEFENSE_LOOKUP_ENABLED')
         return cls(
             server_id=server_id, game_url=game_url, game_zone=required('GGE_GAME_ZONE'),
             alliance_id=number('GGE_ALLIANCE_ID', None, 1, 2**53 - 1),
@@ -65,4 +73,8 @@ class Settings:
             health_port=number('COLLECTOR_HEALTH_PORT', 8081, 1, 65535),
             max_pending=number('ATTACK_MAX_PENDING', 1000, 10, 10_000),
             client_version=env.get('GGE_CLIENT_VERSION') or None,
+            game_commands_enabled=env.get('GAME_COMMANDS_ENABLED') == 'true',
+            defense_lookup_enabled=env.get('DEFENSE_LOOKUP_ENABLED') == 'true',
+            members_poll_seconds=number('GGE_MEMBERS_POLL_SECONDS', 60, 30, 300),
+            defense_diagnostics_enabled=env.get('DEFENSE_DIAGNOSTICS_ENABLED') == 'true',
         )

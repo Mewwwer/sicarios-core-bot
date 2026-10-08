@@ -55,11 +55,52 @@ class ProtocolIntegrationTests(unittest.TestCase):
             self.assertEqual(child.returncode, 0, errors)
             report = json.loads(output.strip())
             self.assertEqual(report['attackCount'], 2)
+            self.assertEqual(report['state']['attacks']['status'], 'missing')
+            self.assertIn('Waiting for complete v0.2 data', report['overview']['content'])
             self.assertEqual(report['messages'][0]['troops']['accuracy'], 'estimated')
             self.assertEqual(report['messages'][0]['defender_name'], 'Obránce')
         finally:
             if child.poll() is None:
                 child.kill()
+            child.communicate(timeout=5)
+
+
+    def test_fake_collector_v2_snapshots_to_http_node_and_mock_discord(self):
+        from dataclasses import replace
+        from test_game_commands import collector
+        secret = 'local-test-secret-at-least-32-characters'
+        child = subprocess.Popen(['node', str(Path(__file__).with_name('receiver-harness.mjs'))],
+                                 env={**os.environ, 'ATTACK_SHARED_SECRET': secret}, stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            ready = Queue()
+            Thread(target=lambda: ready.put(child.stdout.readline()), daemon=True).start()
+            origin = json.loads(ready.get(timeout=5))['origin']
+            c = collector()
+            c.settings = replace(c.settings, core_url=origin, secret=secret)
+            transport = CoreTransport(c.settings)
+            snapshot = c.publisher.take()
+            self.assertEqual(transport.post('/v2/state', snapshot)['result'], 'accepted')
+            # Same snapshot retry is rejected as out-of-order, not alerted.
+            with self.assertRaises(DeliveryError) as rejected: transport.post('/v2/state', snapshot)
+            self.assertEqual(rejected.exception.code, '409')
+            key, payload = c.queue.take()
+            self.assertEqual(transport.post('/v1/attacks', payload)['result'], 'sent_dry_run')
+            self.assertEqual(transport.post('/v1/attacks', payload)['result'], 'duplicate')
+            c.client.state.get_announced_attacks = lambda: []
+            c.refresh()
+            self.assertEqual(transport.post('/v2/state', c.publisher.take())['result'], 'accepted')
+            transport.post('/v1/heartbeat', c.heartbeat())
+            with urlopen(origin+'/readyz') as response: self.assertTrue(json.load(response)['ready'])
+            output, errors = child.communicate(input='close\n', timeout=5)
+            self.assertEqual(child.returncode, 0, errors)
+            result = json.loads(output)
+            self.assertEqual(result['attackCount'], 1)
+            self.assertEqual(result['state']['members']['status'], 'fresh')
+            self.assertIn('No current attacks', json.dumps(result['overview']))
+            self.assertIn('Online 2', json.dumps(result['online']))
+        finally:
+            if child.poll() is None: child.kill()
             child.communicate(timeout=5)
 
 

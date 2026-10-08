@@ -1,3 +1,5 @@
+import { gameDefinitions } from './game-commands.mjs';
+import { readGameConfig } from './game-state.mjs';
 import {
   MessageFlags,
   SlashCommandBuilder,
@@ -214,4 +216,8 @@ export async function handleCommand(interaction, logAction) {
   if (interaction.commandName === 'accept') return handleAccept(interaction, logAction);
   if (interaction.commandName === 'promote') return handlePromote(interaction, logAction);
   if (interaction.commandName === 'remove') return handleRemove(interaction, logAction);
+}
+
+export function commandDefinitions(env = process.env) {
+  return [...COMMANDS, ...gameDefinitions(readGameConfig(env))];
 }

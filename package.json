@@ -11,7 +11,7 @@
     "start": "node src/bot.mjs",
     "start:local": "node --env-file=.env src/bot.mjs",
     "deploy": "node --env-file=.env src/deploy.mjs",
-    "check": "node --check src/config.mjs && node --check src/roles.mjs && node --check src/panel.mjs && node --check src/commands.mjs && node --check src/bot.mjs && node --check src/deploy.mjs && node --check src/attack-monitor.mjs",
+    "check": "node --check src/config.mjs && node --check src/roles.mjs && node --check src/panel.mjs && node --check src/commands.mjs && node --check src/bot.mjs && node --check src/deploy.mjs && node --check src/attack-monitor.mjs && node --check src/game-state.mjs && node --check src/game-commands.mjs && node --check src/unicode-casefold.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

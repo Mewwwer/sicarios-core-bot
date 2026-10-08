@@ -82,3 +82,9 @@ V tomto workspace bylo navíc nutné npm předat zapisovatelnou cache: `--cache 
 Základ integrace: `Mewwwer/sicarios-core-bot`, main commit `251f9c46f86fb2dc8bfc81b5bb91aa0686194301`.
 
 Offline testy používají syntetické identity a tajemství. Uživatelem uvedené jméno účtu a AID jsou dokumentované pouze jako kontext živého pilotu; herní heslo, Discord token ani sdílené tajemství se sem nezapisují.
+
+## Navazující v0.2
+
+Výše uvedené výsledky jsou historickým záznamem v0.1. Nové příkazy, aktuální offline počty,
+volitelné Docker CA mounty a dosud neověřený obranný prototyp popisuje
+[GAME_COMMANDS_VALIDATION.md](GAME_COMMANDS_VALIDATION.md). Živý pilot v0.2 se dosud neprovedl.
