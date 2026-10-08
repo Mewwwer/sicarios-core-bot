@@ -2,7 +2,7 @@
 
 První implementace dvou služeb: Python sběrač přes EmpireCore a přijímač v existujícím Node.js Core. Bez databáze, historie útoků a trvalé fronty. Připraveno 7. 10. 2026.
 
-**Stav:** monitor je začleněný do aktuálního Core z commitu `251f9c46f86fb2dc8bfc81b5bb91aa0686194301` a ověřený simulovanými daty. Živé přihlášení do hry, skutečné Discord upozornění ani nasazení na Northflanku zatím nebyly provedeny.
+**Stav k 8. 10. 2026:** monitor je začleněný do Core se základem `251f9c46f86fb2dc8bfc81b5bb91aa0686194301` a ověřený offline testy. Uživatel potvrdil úspěšný živý pilot: útoky na různé členy, souběžné útoky na stejný cíl, deduplikaci při restartu pouze collectoru, Discord oznámení přes roli a hlášení výpadku/obnovení. Zdroj výsledků a zbývající limity uvádí [validační dokument](ATTACK_MONITOR_VALIDATION.md).
 
 ## Co funguje v této verzi
 
@@ -103,12 +103,11 @@ Pád procesu smaže frontu. Útok, který celý proběhne během výpadku, můž
 
 Metadata jednotek knihovna může cacheovat na dočasném disku. Jde o veřejná herní metadata, nikoliv evidenci útoků. Žádný soubor s útoky, uživatelskými hesly nebo Discord zprávami se nevytváří.
 
-## Zbývající ověření před ostrým provozem
+## Zbývající ověření po živém pilotu
 
-- Ověřit build a start Core na Northflanku s monitorovaným testovacím kanálem.
-- Ověřit konkrétní server/zone, alliance ID a viditelnost útoku na jiného člena aliance.
+- Ověřit ostatní herní světy; pilot podle uživatele běží s účtem MiskoJeTu v SICARIOS, AID 3540.
 - Porovnat počet/odhad a ETA s herním klientem; zkontrolovat i útok aktivní už při startu.
-- V testovacím kanálu provést skutečné Discord odeslání, následně ověřit ping role a nastavení telefonů.
+- Ověřit nastavení telefonů; skutečné Discord doručení přes roli už uživatel potvrdil.
 - Změřit RAM/CPU, zpoždění a chování při běžném odpojení, restartu a deployi.
 
 ## Primární podklady
