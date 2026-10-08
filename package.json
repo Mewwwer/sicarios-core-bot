@@ -9,9 +9,10 @@
   },
   "scripts": {
     "start": "node src/bot.mjs",
-	"start:local": "node --env-file=.env src/bot.mjs",
+    "start:local": "node --env-file=.env src/bot.mjs",
     "deploy": "node --env-file=.env src/deploy.mjs",
-    "check": "node --check src/config.mjs && node --check src/roles.mjs && node --check src/panel.mjs && node --check src/commands.mjs && node --check src/bot.mjs && node --check src/deploy.mjs"
+    "check": "node --check src/config.mjs && node --check src/roles.mjs && node --check src/panel.mjs && node --check src/commands.mjs && node --check src/bot.mjs && node --check src/deploy.mjs && node --check src/attack-monitor.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "discord.js": "14.27.0"
