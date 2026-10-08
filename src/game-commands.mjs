@@ -69,9 +69,12 @@ export function resolvePlayer(section, input) {
 
 export function renderDefense(d) {
   const capacity = (v) => v === null ? 'Neznámá / Unknown' : String(v);
+  const total = d.capacities.yard, alliance = d.capacities.alliance;
+  const courtyard = total !== null && alliance !== null && total >= alliance ? total - alliance : null;
+  const age = d.source_age_seconds ?? null;
   const positionNames = ['Levá / Left', 'Střed / Middle', 'Pravá / Right', 'Nádvoří / Keep', 'Stronghold', 'Podpora / Support', 'Rezerva / Reserve'];
   return { embeds: [{ title: 'Obrana — experiment / Defense — experiment', description:
-    `${safe(d.target.name)} · ${safe(d.target.castle_name)} · ${d.target.x}:${d.target.y}\n${stamp(d.observed_at)} · ${d.quality}\nKapacita hradeb / Wall: ${capacity(d.capacities.wall)}\nNádvoří / Courtyard: ${capacity(d.capacities.yard)}\nServerem uvedená kapacita pro alianční podporu / Server alliance support capacity: ${capacity(d.capacities.alliance)}\nKastelán / Castellan: ${d.castellan ? `${safe(d.castellan.name)} · ID ${d.castellan.id ?? '?'}` : 'Neznámý / Unknown'}\nBez vybavení a predikce výsledku / No equipment audit or battle prediction.`,
+    `${safe(d.target.name)} · ${safe(d.target.castle_name)} · ${d.target.x}:${d.target.y}\nNačtení odpovědi / Response fetched: ${stamp(d.fetched_at ?? d.observed_at)} · ${d.quality}\nStáří zdroje AS při načtení / Source age at fetch: ${age === null ? 'Neznámé / Unknown' : `${age} s`}\nČas měření ve hře nepotvrzen / Game measurement time unconfirmed.\n⚠️ Hodnoty SDI; shoda s herním dialogem neověřena / SDI values; game dialog agreement unverified.\nKapacita hradeb / Wall: ${capacity(d.capacities.wall)}\nNádvoří bez alianční části / Courtyard excluding alliance: ${capacity(courtyard)}\nKapacita alianční podpory / Alliance support capacity: ${capacity(alliance)}\nCelková kapacita nádvoří včetně aliance / Total courtyard capacity including alliance: ${capacity(total)}${total !== null && alliance !== null && total < alliance ? '\n⚠️ UYL < AUYL; nádvoří nelze odvodit / Cannot derive courtyard.' : ''}\nKastelán / Castellan: ${d.castellan ? `${safe(d.castellan.name)} · ID ${d.castellan.id ?? '?'}` : 'Neznámý / Unknown'}\nBez vybavení a predikce výsledku / No equipment audit or battle prediction.`,
     fields: d.positions === null ? [{ name: 'Jednotky / Units', value: 'Neznámé / Unknown' }] : d.positions.length === 0 ? [{ name: 'Jednotky / Units', value: 'Explicitně prázdné S / Explicit empty S' }]
       : d.positions.map((p, i) => { const text = p.map((u) => `ID ${u.id}: ${u.count} (${u.kind})`).join(', ') || 'Explicitně prázdná pozice / Explicit empty position'; return { name: positionNames[i], value: text.length > 600 ? text.slice(0, 580) + '… (zkráceno / shortened)' : text }; }) }] };
 }
@@ -81,6 +84,13 @@ export function validateDefense(d, request, now) {
   if (!d || d.schema_version !== 2 || d.request_id !== request.request_id || d.server_id !== request.server_id || d.alliance_id !== request.alliance_id || d.target?.player_id !== request.player_id || d.target.kingdom_id !== 0 || !numeric(d.target.castle_id, 1) || !numeric(d.target.x) || !numeric(d.target.y) || !numeric(d.observed_at, 1) || d.observed_at < now - 30 || d.observed_at > now + 5 || !['complete', 'partial', 'unavailable'].includes(d.quality)) throw new Error('Invalid defense');
   for (const k of ['name', 'castle_name']) if (typeof d.target[k] !== 'string' || [...d.target[k]].length > 200) throw new Error('Invalid defense label');
   for (const k of ['wall', 'yard', 'alliance']) if (d.capacities?.[k] !== null && !numeric(d.capacities?.[k])) throw new Error('Invalid capacity');
+  // Additive fields: an older v0.2 collector remains readable, with unknown AS
+  // and observed_at labelled only as receipt time. Never as game measurement.
+  if (d.fetched_at !== undefined && d.fetched_at !== d.observed_at) throw new Error('Invalid fetch time');
+  if (d.source_age_seconds !== undefined && d.source_age_seconds !== null && !numeric(d.source_age_seconds)) throw new Error('Invalid source age');
+  const expectedCourtyard = d.capacities.yard !== null && d.capacities.alliance !== null && d.capacities.yard >= d.capacities.alliance ? d.capacities.yard - d.capacities.alliance : null;
+  if (d.capacities.courtyard !== undefined && d.capacities.courtyard !== expectedCourtyard) throw new Error('Invalid courtyard');
+  if (d.quality === 'complete' && d.capacities.yard < d.capacities.alliance) throw new Error('Inconsistent capacities');
   if (d.positions !== null && (!Array.isArray(d.positions) || d.positions.length > 7 || d.positions.some((p) => !Array.isArray(p) || p.length > 100 || p.some((u) => !numeric(u.id) || !numeric(u.count) || !['troop', 'tool', 'unknown'].includes(u.kind))))) throw new Error('Invalid positions');
   if (d.castellan !== null && (!d.castellan || (d.castellan.id !== null && !numeric(d.castellan.id)) || (d.castellan.name !== null && (typeof d.castellan.name !== 'string' || [...d.castellan.name].length > 200)))) throw new Error('Invalid castellan');
   if (d.target.x > 1_000_000 || d.target.y > 1_000_000 || (d.quality === 'complete' && (d.positions === null || d.positions.some((p) => p.some((u) => u.kind === 'unknown')) || Object.values(d.capacities).some((v) => v === null) || d.castellan === null || d.castellan.id === null || d.castellan.name === null))) throw new Error('Invalid defense quality or coordinates');

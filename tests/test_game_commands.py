@@ -44,6 +44,11 @@ def collector():
     client.alliance = SimpleNamespace(get_local_members=lambda **kw: [member(), member(223)])
     client.player = SimpleNamespace(get_player_info=lambda pid, **kw: profile(pid))
     client.defense = SimpleNamespace(get_support_defense_info=lambda *a, **kw: GetSupportDefenseResponse.model_validate({'S': [[[1, 20], [2, 3], [999, 4]]], 'UWL': 100, 'UYL': 200, 'AUYL': 50, 'gui': {'I': [[555, 999]]}, 'gli': {}}))
+    # Keep existing failure/reconnect fixtures exercising the same SDI request
+    # through the new public packet API. No game connection is constructed.
+    client.request_packet = lambda req, command, timeout: SimpleNamespace(error_code=0, payload=
+        client.defense.get_support_defense_info(req.target_x, req.target_y, req.source_x, req.source_y, timeout=timeout)
+        .model_dump(by_alias=True, exclude_unset=True))
     c = Collector(replace(settings(), game_commands_enabled=True, defense_lookup_enabled=True, health_port=0), client, transport=SimpleNamespace(post=lambda *a: {'result': 'accepted'}))
     c.metadata = ({1}, {2})
     c.refresh_members(); c.refresh()

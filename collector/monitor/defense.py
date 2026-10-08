@@ -5,6 +5,7 @@ from uuid import UUID
 import copy
 import time
 from .normalize import identifier, name
+from . import defense_diagnostics as diagnostics
 
 
 class LookupError(Exception):
@@ -17,10 +18,16 @@ def present(model, field):
     return field in getattr(model, 'model_fields_set', set())
 
 
-def normalize_defense(reply, target, metadata, observed):
+def normalize_defense(reply, target, metadata, observed, raw=None):
     capacities = {}
-    for key, field in [('wall', 'wall_limit'), ('yard', 'yard_limit'), ('alliance', 'available_yard_limit')]:
-        capacities[key] = identifier(getattr(reply, field)) if present(reply, field) else None
+    for key, field, alias in [('wall', 'wall_limit', 'UWL'), ('yard', 'yard_limit', 'UYL'), ('alliance', 'available_yard_limit', 'AUYL')]:
+        value = raw.get(alias) if raw is not None else getattr(reply, field) if present(reply, field) else None
+        capacities[key] = identifier(value)
+    total, alliance = capacities['yard'], capacities['alliance']
+    capacities['courtyard'] = total - alliance if total is not None and alliance is not None and total >= alliance else None
+    # AS is not a declared field in the pinned SDI model; extra='allow' retains
+    # it. Neither receipt time nor AS proves a measurement time in the game.
+    age = identifier((raw if raw is not None else reply.model_extra or {}).get('AS'))
     positions = None
     unknown = False
     if present(reply, 'defense_positions'):
@@ -43,11 +50,11 @@ def normalize_defense(reply, target, metadata, observed):
         lord = reply.castellan
         castellan = {'id': identifier(lord.commander_id) if present(lord, 'commander_id') else None,
                      'name': name(lord.name) if present(lord, 'name') else None}
-    fields = [positions is not None, *[v is not None for v in capacities.values()],
+    fields = [positions is not None, age is not None, *[v is not None for v in capacities.values()],
               castellan is not None and castellan['id'] is not None and castellan['name'] is not None]
     quality = 'complete' if all(fields) and not unknown else 'partial' if any(fields) else 'unavailable'
     # SCID, gui, gli and tower/own castellans are deliberately not exported.
-    return {'target': target, 'observed_at': observed, 'quality': quality,
+    return {'target': target, 'observed_at': observed, 'fetched_at': observed, 'source_age_seconds': age, 'quality': quality,
             'capacities': capacities, 'positions': positions, 'castellan': castellan}
 
 
@@ -79,6 +86,7 @@ class DefenseLookup:
         self.last_start = -float('inf')
         self.cache = OrderedDict()
         self.thread = None
+        self.diagnostic_attempts = 0
 
     def disconnect(self):
         with self.lock:
@@ -144,7 +152,7 @@ class DefenseLookup:
             job = {'generation': self.generation, 'done': Event(), 'result': None, 'error': None}
             self.active = job
             self.last_start = self.monotonic()
-            self.thread = Thread(target=self.work, args=(pid, job), daemon=True)
+            self.thread = Thread(target=self.work, args=(pid, job, value['request_id']), daemon=True)
             self.thread.start()
         if not job['done'].wait(12):
             with self.lock:
@@ -165,10 +173,11 @@ class DefenseLookup:
         return {'schema_version': 2, 'request_id': request['request_id'],
                 'server_id': request['server_id'], 'alliance_id': request['alliance_id'], **result}
 
-    def work(self, pid, job):
+    def work(self, pid, job, request_id):
         c = self.collector
         deadline = self.monotonic() + 11.5
         sdi_started = False
+        diagnostic = None
         def timeout():
             remaining = deadline - self.monotonic()
             if remaining <= 0:
@@ -194,9 +203,35 @@ class DefenseLookup:
             check_generation()
             self.member_allowed(pid)
             sdi_started = True
-            reply = c.client.defense.get_support_defense_info(target.x, target.y, source.x, source.y, timeout=timeout())
-            check_generation()
+            from empire_core.defense.models import GetSupportDefenseRequest, GetSupportDefenseResponse
+            request = GetSupportDefenseRequest(TX=target.x, TY=target.y, SX=source.x, SY=source.y)
+            if c.settings.defense_diagnostics_enabled and self.diagnostic_attempts < diagnostics.LIMIT:
+                self.diagnostic_attempts += 1
+                diagnostic = {'diagnostic_version': 1, 'request_id': request_id,
+                    'server_id': c.settings.server_id, 'alliance_id': c.settings.alliance_id,
+                    'generation': job['generation'], 'requested_at': int(self.clock()),
+                    'target': {'player_id': pid, 'castle_id': target.castle_id, 'kingdom_id': 0, 'x': target.x, 'y': target.y},
+                    'request_coordinates': {'TX': target.x, 'TY': target.y, 'SX': source.x, 'SY': source.y}}
+            # Same session/frame/Connection.request/command lock as the service
+            # method. Capture the whitelist before Pydantic's SpyPositions
+            # coercion; no global packet observer can misassign a late reply.
+            packet = c.client.request_packet(request, request.get_response_command(), timeout=timeout())
             observed = int(self.clock())
+            if packet.error_code != 0 or not isinstance(packet.payload, dict):
+                raise LookupError(503, 'lookup_failed')
+            raw = packet.payload
+            if diagnostic is not None:
+                diagnostic.update(fetched_at=observed, wire=diagnostics.selected_fields(raw))
+            # The library coerces and drops malformed S rows. Refuse them so
+            # an invalid position cannot become a supposedly measured empty one.
+            if 'S' in raw and (not isinstance(raw['S'], list) or len(raw['S']) > 7 or any(
+                not isinstance(p, list) or len(p) > 100 or any(not isinstance(row, list) or len(row) != 2
+                    or identifier(row[0]) is None or identifier(row[1]) is None for row in p) for p in raw['S'])):
+                raise ValueError('Invalid SDI positions')
+            reply = GetSupportDefenseResponse.model_validate({k: raw[k] for k in ('S', 'AS', 'UWL', 'UYL', 'AUYL', 'B') if k in raw})
+            if diagnostic is not None:
+                diagnostic['model'] = diagnostics.model_fields(reply)
+            check_generation()
             # Re-read the profile to refuse a relocation or membership change
             # during lookup. No map writes or game actions are used.
             checked = main_castle(profile(pid), pid)
@@ -205,7 +240,11 @@ class DefenseLookup:
             self.member_allowed(pid)
             result = normalize_defense(reply, {'player_id': pid, 'name': name(target_profile.player_name) or str(pid),
                 'castle_id': target.castle_id, 'castle_name': name(target.castle_name) or str(target.castle_id),
-                'x': target.x, 'y': target.y, 'kingdom_id': 0}, c.metadata, observed)
+                'x': target.x, 'y': target.y, 'kingdom_id': 0}, c.metadata, observed, raw)
+            if diagnostic is not None:
+                diagnostic['normalized'] = {'capacities': result['capacities'], 'source_age_seconds': result['source_age_seconds'],
+                    'wall': [p[:20] for p in result['positions'][:3]] if result['positions'] is not None else None,
+                    'quality': result['quality']}
             with self.lock:
                 if job['generation'] == self.generation and not self.poisoned and not c.stop.is_set():
                     while len(self.cache) >= 100:
@@ -227,6 +266,9 @@ class DefenseLookup:
                 if self.active is job:
                     self.active = None
                 job['done'].set()
+            if diagnostic is not None:
+                diagnostic['outcome'] = job['error'].code if job['error'] else 'accepted'
+                diagnostics.emit(diagnostic)
 
     def close(self):
         self.disconnect()

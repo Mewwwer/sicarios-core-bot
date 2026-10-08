@@ -236,8 +236,13 @@ Configuration: [docs/ATTACK_MONITOR.md](docs/ATTACK_MONITOR.md). Validation and 
 
 `/online [stranka]` čte čerstvý přehled členů ve hře a rozlišuje online, offline a unknown.
 `/utoky [stranka]` čte aktuální alianční útoky, nezávisle na RAM deduplikaci alertů.
-Experimentální `/obrana hrac` měří pouze hlavní hrad jiného současného člena ve Velké říši;
+Experimentální `/obrana hrac` čte SDI pouze pro hlavní hrad jiného současného člena ve Velké říši;
 neprovádí žádné herní akce. Chybějící údaje jsou unknown, nikoli naměřené nuly.
+Načtení SDI není potvrzený čas měření ve hře. Kapacity oddělují nádvoří bez aliance,
+alianční podporu a celkovou kapacitu; nesoulad hradeb/jednotek v pilotu je dosud nevyřešený.
+Dočasná collector diagnostika `DEFENSE_DIAGNOSTICS_ENABLED=false` je samostatně vypnutá;
+[přesný diagnostický pilot](docs/GAME_COMMANDS.md#diagnostický-pilot-nesouladu-obrany) zachytí
+nejvýše pět whitelist záznamů, bez celých paketů a tajemství.
 
 Nové funkce jsou výchozím nastavením vypnuté. Přehledy zapíná `GAME_COMMANDS_ENABLED`,
 obranu navíc `DEFENSE_LOOKUP_ENABLED`, vždy na Core i collectoru. Registrace zůstává ruční:

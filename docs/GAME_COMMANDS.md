@@ -11,6 +11,7 @@ EmpireCore zůstává 0.49.0, commit `702f9d26cc65ea6c3b26a03e8ad801b2684f42f3`.
 |---|---|---|
 | `GAME_COMMANDS_ENABLED` | Core + collector | `false`; přesné `true` zapne přehledy/snapshoty |
 | `DEFENSE_LOOKUP_ENABLED` | Core + collector | `false`; vyžaduje zapnuté přehledy |
+| `DEFENSE_DIAGNOSTICS_ENABLED` | Pouze collector | `false`; vyžaduje defense flag; nejvýše 5 nových SDI pokusů za proces, bez resetu při reconnectu |
 | `GGE_ALLIANCE_ID` | Core + collector | Na Core nově povinné při zapnutých funkcích; bez implicitního ID; SICARIOS pilot `3540` |
 | `GAME_COMMAND_CHANNEL_ID` | Core | Povinné při zapnutých přehledech; ID existujícího interního kanálu |
 | `ATTACK_COLLECTOR_URL` | Core | `http://sicarios-attack-collector:8081`; pouze při obraně; origin bez credentials, path/query/fragment |
@@ -128,18 +129,101 @@ Lookup z čerstvého kompletního member seznamu:
    a aktuální AID, právě jeden `MapItemType.CASTLE` v `Kingdom.GREEN`, owner, ID a souřadnice.
    Outpost, jiný svět, chybějící/nejednoznačný či obsazený hrad jsou odmítnuté.
 2. Stejně ověří vlastní hlavní hrad ve Velké říši. Zdroj nejsou první libovolné souřadnice ze seznamu.
-3. Na stejné relaci volá `get_support_defense_info(target_x,target_y,source_x,source_y)`.
+3. Na stejné relaci volá veřejné `EmpireClient.request_packet(GetSupportDefenseRequest,
+   'sdi', timeout)`; používá stejný frame, `Connection.request`, command lock a waiter check
+   jako `get_support_defense_info`. Není to další klient ani globální packet observer.
+   Potřebná pole parsuje připnutým `GetSupportDefenseResponse`, gui/gli ani SCID neparsuje.
 4. Znovu čte profil cíle, ověří stejný hrad/souřadnice/AID a členství. Změna mezi čteními lookup
    odmítne. SDI nenese jednoznačný target ID: prototype může ověřit stabilitu souřadnic při čtení,
    nemůže atomicky zamknout herní mapu; při jakékoliv pochybnosti v pilotu obranu vypni.
 
-DTO uvádí target, observed_at, quality `complete|partial|unavailable`, capacities
-`wall/yard/alliance`, pozice `S` s `id/count/kind` (`troop|tool|unknown`) a omezené `B` id/name.
+DTO uvádí target, `fetched_at` a kompatibilní `observed_at` se stejným **časem přijetí
+odpovědi**, `source_age_seconds` z AS nebo null, quality `complete|partial|unavailable`,
+capacities `wall/yard/alliance/courtyard`, pozice `S` s `id/count/kind`
+(`troop|tool|unknown`) a omezené `B` id/name. `yard` je UYL, tedy celková kapacita nádvoří
+**včetně** alianční části. `alliance` je AUYL. `courtyard = UYL − AUYL` pouze při obou
+explicitních nezáporných celých číslech a UYL ≥ AUYL; jinak null, nikdy domyšlená nula.
+Core ověřuje odvození. Discord ukazuje všechny tři kapacity zvlášť a varuje při nesouladu.
+Zero UYL/AUYL je přípustné pouze explicitně. Číselné stringy, bool a záporné kapacity jsou unknown.
+Nový Core přijme i starší v0.2 DTO bez nových polí; jeho observed_at označí pouze jako načtení
+a AS jako unknown. Nové partial/complete znamená pokrytí polí, nikoliv shodu s herním dialogem.
+
+Připnutý SDI model AS nedefinuje jako běžné pole, ale `extra='allow'` ho uchovává.
+Dokumentace knihovny ho popisuje jako stáří špionážních údajů v sekundách. Přijímáme pouze
+explicitní nezáporné celé číslo, včetně 0; bez něj je stáří unknown. Discord uvádí AS
+**při načtení**: cache neomladí fetched_at ani AS. TTL 30 s omezuje věk lokální cache,
+nezaručuje čerstvost zdrojových herních údajů. Z fetched_at − AS neodvozujeme potvrzený čas
+měření. Kapacity/jednotky jsou viditelně označené jako SDI se zatím neověřenou shodou s dialogem.
+
 Modelové defaulty se bez `model_fields_set` nevydávají za měření. Explicitní `S:[]` je jiné než
-chybějící S. Neznámá ID nejsou přesným součtem vojáků; GUI/Gli, source SCID, tower castellan,
+chybějící S. Knihovna převádí páry přes `js_int` a vynechává nekladné počty; collector nyní
+odmítá malformed S místo jeho tichého převodu na prázdnou pozici (stejná konzervativní
+karanténa). Explicitní nulové řádky může parser vynechat; kladná celá čísla se nepřepočítávají.
+Neznámá ID nejsou přesným součtem vojáků; GUI/Gli, source SCID, tower castellan,
 vlastní roster, raw paket ani efekty se neexportují. `AUYL` je serverem uvedená kapacita pro
 alianční podporu, nikoliv zaručený volný počet dalších vojáků. Kastelán je bez vybavení;
 quality complete neznamená audit hradu, tier score, PVP procenta nebo predikci vítězství.
+
+### Diagnostický pilot nesouladu obrany
+
+Uživatel doložil KrakenQ / Hrad KrakenQ / GREEN hlavní hrad / 574:528: wall 8998 vs dialog
+9180 a vojáci 12128 vs 12374. Stav potvrdil jako stejný; opakovaný nový lookup dal stejné
+hodnoty. Oprava popisku UYL je potvrzená ze zdrojů knihovny. Příčina rozdílu UWL/S potvrzená
+není; žádný koeficient nebo screenshotové číslo není v runtime použité. Dodaný screenshot
+je „Špionáž brány (50 sekundy zpátky)“; neznáme AS odpovědi SDI z původního porovnání.
+Stáří ani rozdílný kontext dialogů zatím nejsou doloženým vysvětlením.
+
+Diagnostika zapisuje pouze do existujícího collector logu řádky
+`SICARIOS_DEFENSE_DIAGNOSTIC {JSON}`. Žádný soubor, historie v RAM ani nový HTTP endpoint.
+Maximálně 5 nových SDI pokusů za proces; cache hity nezapisuje, reconnect limit neobnoví.
+Jeden JSON má limit 16 KiB, první tři pozice S, nejvýše 20 řádků na pozici s příznakem
+truncation. Zachytí pouze validní dvojice ID/počet, ne libovolné texty či hodnoty.
+
+Záznam obsahuje UUID requestu, server/AID, generaci, časy požadavku/přijetí, ověřená numerická
+ID cíle a souřadnice TX/TY/SX/SY. `wire` má whitelist S/AS/UWL/UYL/AUYL před parsováním,
+`model` stejné vybrané hodnoty po parsování, `normalized` kapacity/AS a ID/count/kind tří
+hradeb, `outcome` accepted nebo kód odmítnutí. Chybějící/invalid skaláry jsou označené,
+nikoliv nuly. Žádný raw paket, gui/gli, SCID, kastelán/vybavení, jména, credentials nebo
+shared secret. Kontext requestu není důkaz target identity odpovědi SDI. Záznam po timeoutu
+nebo změně generace nesmí být vydáván za úspěšný výsledek; dál platí karanténa.
+
+1. Ručně sestav/nasaď aktuální commit PR #2 do **obou služeb**. Core má již zapnuté
+   `GAME_COMMANDS_ENABLED=true`, `DEFENSE_LOOKUP_ENABLED=true` a existující privátní collector
+   URL/kanál/AID; zachovej stávající attack env/secrets. Core žádný nový env nepotřebuje.
+   Na collectoru Pause → ověř 0 instancí → build aktuálního commitu → nastav navíc
+   `DEFENSE_DIAGNOSTICS_ENABLED=true` → Resume právě jedné instance, bez rolling překryvu.
+   Nový proces začíná bez defense cache. Není nutná nová registrace Discord příkazů,
+   pokud /obrana již existuje. Nepřihlašuj collector účet v browseru.
+2. Ověř `/healthz` → `game_commands.defense_diagnostics_enabled:true`,
+   `sdi_quarantined:false`; attack `/readyz`, heartbeat a běžné alerty musí fungovat dál.
+   V interním Discord kanálu proveď `/obrana hrac:KrakenQ` (autocomplete ověřeného člena).
+   Zkontroluj target 574:528; ulož ephemeral odpověď včetně času načtení a AS.
+3. Ve svém běžném herním klientovi zachyť stejný hrad: celý název/souřadnice, druh dialogu
+   (podpora vs útok/špionáž), čas porovnání, zobrazené stáří zprávy, všechny tři pozice hradeb,
+   ID jednotek, pokud je klient dostupně ukazuje, kapacity a potvrzení nezměněného stavu.
+   Pokud lze, zachyť i dialog podpory odpovídající požadavku SDI, vedle původní špionáže brány.
+   Screenshotové AS=50 nelze automaticky přiřadit k odpovědi SDI.
+4. Pro druhý **nový** lookup počkej alespoň 31 s od prvního času načtení (TTL 30 s,
+   user cooldown 15 s). Opakuj /obrana a herní porovnání. V logu musí přibýt nový JSON
+   s novým request_id/fetched_at; pokud nepřibyl, neoznačuj odpověď jako nově načtenou.
+   Nejvýše pět pokusů; při timeoutu nepokoušej další SDI ani restart jako obcházení karantény.
+5. Z collector logu vyexportuj **jen jednotlivé řádky** s prefixem
+   `SICARIOS_DEFENSE_DIAGNOSTIC` pro tyto lookupy, nikoliv celé deployment/startup logy.
+   Pokud používáš Shell a máš pouze exportovaný log, filtr je
+   `rg 'SICARIOS_DEFENSE_DIAGNOSTIC ' collector-pilot.log`.
+   Předej je spolu s oběma Discord odpověďmi, screenshoty, UTC časy, commitem a potvrzením
+   stejného stavu. Chybějící řádky vysvětli (limit, cache, odmítnutí před SDI); nesbírej raw paket.
+6. Po krátkém pilotu nastav na collectoru `DEFENSE_DIAGNOSTICS_ENABLED=false` přes stejný
+   Pause / 0 instancí / Resume postup. Při přetrvávajícím nesouladu používej /obrana pouze
+   jako neověřený prototyp nebo vypni `DEFENSE_LOOKUP_ENABLED` v obou službách; při jeho
+   vypnutí musí být diagnostic flag false. Přehledy a attack monitor mohou zůstat zapnuté.
+
+Vyhodnocení: rozdíl wire → model doloží parser; model → normalized doloží normalizaci;
+normalized → Discord doloží validaci/rendering. Pokud se vybraná S/UWL shodují na všech
+stupních, chyba jejich přenosu těmito stupni není příčinou. Zbývá herní význam/zdroj stáří
+nebo klientské výpočty, které whitelist bez dalších doložených podkladů nepotvrdí. Rostoucí
+AS při opakovaném novém fetched_at je důkaz staršího zdroje podle serveru, ne potvrzení, že
+právě to způsobilo rozdíl. Truncated/invalid diagnostika není úplné porovnání pozic.
 
 ### Pozdní SDI a relace
 

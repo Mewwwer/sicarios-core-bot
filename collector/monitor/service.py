@@ -102,6 +102,7 @@ class Collector:
                 'session': heartbeat['session'], 'pending': len(self.queue),
                 'game_commands': {'enabled': self.settings.game_commands_enabled,
                                   'defense_enabled': self.settings.defense_lookup_enabled,
+                                  'defense_diagnostics_enabled': self.settings.defense_diagnostics_enabled,
                                   'sdi_quarantined': self.defense.poisoned}}
 
     def enqueue(self, movement, *, checkpoint=None):

@@ -165,3 +165,40 @@ test('defense DTO validates request identity, unknowns and bounds; HTTP failure 
   const handler = createGameHandler(config, s, { rolesResolver: async () => roles, clock: () => 1000, fetcher: async () => { requests++; throw new Error('timeout'); } });
   const i = interaction({ command: 'obrana' }); await handler(i); assert.equal(requests, 1); assert.match(i.calls[1][1].content, /unavailable/);
 });
+
+test('defense shows separated consistent courtyard capacities and receipt/source age, without correcting SDI counts', () => {
+  const request = { schema_version: 2, request_id: randomUUID(), server_id: config.serverId, alliance_id: 444, player_id: 1 };
+  const dto = { ...request, target: { player_id: 1, name: 'KrakenQ', castle_name: 'Hrad KrakenQ', castle_id: 2, x: 574, y: 528, kingdom_id: 0 },
+    observed_at: 1000, fetched_at: 1000, source_age_seconds: 50, quality: 'partial',
+    capacities: { wall: 8998, yard: 1029100, alliance: 286100, courtyard: 743000 }, castellan: null,
+    positions: [[{ id: 489, count: 744, kind: 'troop' }], [{ id: 238, count: 3565, kind: 'troop' }], [{ id: 2, count: 99, kind: 'tool' }]] };
+  validateDefense(dto, request, 1029); // A cached response keeps its original receipt/AS.
+  const embed = renderDefense(dto).embeds[0];
+  assert.match(embed.description, /Courtyard excluding alliance: 743000/);
+  assert.match(embed.description, /Alliance support capacity: 286100/);
+  assert.match(embed.description, /Total courtyard capacity including alliance: 1029100/);
+  assert.match(embed.description, /Response fetched: <t:1000:F>/);
+  assert.match(embed.description, /Source age at fetch: 50 s/);
+  assert.match(embed.description, /Game measurement time unconfirmed/);
+  assert.match(embed.description, /game dialog agreement unverified/);
+  assert.match(embed.description, /Wall: 8998/);
+  assert.equal(embed.fields[1].value, 'ID 238: 3565 (troop)');
+  assert.equal(embed.fields[2].value, 'ID 2: 99 (tool)');
+  for (const change of [{ fetched_at: 1029 }, { source_age_seconds: -1 }, { source_age_seconds: '50' }, { source_age_seconds: true },
+    { capacities: { ...dto.capacities, courtyard: 743001 } }]) assert.throws(() => validateDefense({ ...dto, ...change }, request, 1000));
+});
+
+test('defense legacy, missing and inconsistent capacity/AS fields stay unknown; legitimate zero remains zero', () => {
+  const request = { schema_version: 2, request_id: randomUUID(), server_id: config.serverId, alliance_id: 444, player_id: 1 };
+  const dto = { ...request, target: { player_id: 1, name: 'Member', castle_name: 'Castle', castle_id: 2, x: 4, y: 5, kingdom_id: 0 },
+    observed_at: 1000, quality: 'partial', capacities: { wall: null, yard: 10, alliance: null }, positions: null, castellan: null };
+  for (const capacities of [dto.capacities, { wall: null, yard: null, alliance: 10 }, { wall: null, yard: 9, alliance: 10 }]) {
+    validateDefense({ ...dto, capacities }, request, 1000);
+    const description = renderDefense({ ...dto, capacities }).embeds[0].description;
+    assert.match(description, /Courtyard excluding alliance: Neznámá/);
+    assert.match(description, /Source age at fetch: Neznámé/);
+  }
+  const description = renderDefense({ ...dto, source_age_seconds: 0, capacities: { wall: 0, yard: 0, alliance: 0 } }).embeds[0].description;
+  assert.match(description, /Courtyard excluding alliance: 0/);
+  assert.match(description, /Source age at fetch: 0 s/);
+});
