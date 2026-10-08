@@ -146,7 +146,7 @@ export function createDiscordSink(client, config) {
   };
 }
 
-function readJson(request) {
+function readJson(request, limit = MAX_BODY) {
   return new Promise((resolve, reject) => {
     if (!/^application\/json(?:\s*;|$)/iu.test(request.headers['content-type'] || '')) {
       request.resume(); reject(Object.assign(new Error('JSON required'), { status: 415 })); return;
@@ -155,11 +155,11 @@ function readJson(request) {
     const chunks = [];
     request.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY) { reject(Object.assign(new Error('Payload too large'), { status: 413 })); return; }
-      chunks.push(chunk);
+      if (size > limit) { reject(Object.assign(new Error('Payload too large'), { status: 413 })); return; }
+      if (size <= limit) chunks.push(chunk);
     });
     request.on('end', () => {
-      if (size > MAX_BODY) return;
+      if (size > limit) return;
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
       catch { reject(Object.assign(new Error('Invalid JSON'), { status: 400 })); }
     });
@@ -177,7 +177,7 @@ function validateHeartbeat(value, config, now) {
   return { session: value.session, lastSnapshot: snapshot, receivedAt: now };
 }
 
-export async function createAttackServer(config, sink, { clock = () => Date.now() / 1000, log = console, checkIntervalMs = 10_000 } = {}) {
+export async function createAttackServer(config, sink, { clock = () => Date.now() / 1000, log = console, checkIntervalMs = 10_000, gameState = null } = {}) {
   const started = clock();
   const secretHash = createHash('sha256').update(`Bearer ${config.secret}`).digest();
   const seen = new Map();
@@ -259,16 +259,20 @@ export async function createAttackServer(config, sink, { clock = () => Date.now(
   };
   const server = http.createServer(async (request, response) => {
     try {
-      if (request.method === 'GET' && request.url === '/healthz') return json(response, 200, { alive: !closing });
+      if (request.method === 'GET' && request.url === '/healthz') return json(response, 200, { alive: !closing, ...(gameState ? { game_commands: gameState.diagnostics() } : {}) });
       if (request.method === 'GET' && request.url === '/readyz') {
         // Operational diagnosis only. Do NOT use this to gate Northflank
         // routing: the receiver must accept heartbeats while the feed is stale.
         const state = health(); return json(response, state.ready ? 200 : 503, state);
       }
-      if (request.method !== 'POST' || !['/v1/attacks', '/v1/heartbeat'].includes(request.url)) return json(response, 404, { error: 'not_found' });
+      if (request.method !== 'POST' || !['/v1/attacks', '/v1/heartbeat', '/v2/state'].includes(request.url)) return json(response, 404, { error: 'not_found' });
       const incomingHash = createHash('sha256').update(request.headers.authorization || '').digest();
       if (!timingSafeEqual(incomingHash, secretHash)) { request.resume(); return json(response, 401, { error: 'unauthorized' }); }
-      const value = await readJson(request);
+      const value = await readJson(request, request.url === '/v2/state' ? 1_048_576 : MAX_BODY);
+      if (request.url === '/v2/state') {
+        if (!gameState) return json(response, 503, { error: 'feature_disabled' });
+        gameState.accept(value); return json(response, 200, { result: 'accepted' });
+      }
       if (request.url === '/v1/heartbeat') {
         heartbeat = validateHeartbeat(value, config, clock());
         json(response, 200, { result: 'accepted' });
@@ -304,10 +308,10 @@ export async function createAttackServer(config, sink, { clock = () => Date.now(
   };
 }
 
-export async function startAttackMonitor(client, { env = process.env, log = console } = {}) {
+export async function startAttackMonitor(client, { env = process.env, log = console, gameState = null } = {}) {
   const config = readMonitorConfig(env);
   if (!config) return null;
-  const server = await createAttackServer(config, createDiscordSink(client, config), { log });
+  const server = await createAttackServer(config, createDiscordSink(client, config), { log, gameState });
   log.info(`[ATTACK] Internal receiver started on port ${config.port}; dry run: ${config.dryRun}.`);
   return server;
 }

@@ -4,8 +4,8 @@ import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import net from 'node:net';
 
-for (const enabled of [false, true]) {
-  test(`real bot starts and handles SIGTERM with monitor ${enabled ? 'enabled' : 'disabled'}`, { timeout: 10_000 }, async () => {
+for (const [enabled, gameEnabled] of [[false, false], [true, false], [true, true]]) {
+  test(`real bot starts and handles SIGTERM with monitor ${enabled ? 'enabled' : 'disabled'} and game commands ${gameEnabled}`, { timeout: 10_000 }, async () => {
     const reservation = net.createServer();
     reservation.listen(0, '127.0.0.1');
     await once(reservation, 'listening');
@@ -17,6 +17,8 @@ for (const enabled of [false, true]) {
       env: {
         ...process.env, DISCORD_TOKEN: 'offline-test-only', DISCORD_GUILD_ID: '100000000000000001',
         ATTACK_MONITOR_ENABLED: String(enabled), ATTACK_DRY_RUN: 'true',
+        GAME_COMMANDS_ENABLED: String(gameEnabled), DEFENSE_LOOKUP_ENABLED: 'false',
+        GGE_ALLIANCE_ID: '444', GAME_COMMAND_CHANNEL_ID: '100000000000000004',
         ATTACK_SHARED_SECRET: 'offline-test-secret-at-least-32-characters', GGE_SERVER_ID: 'test-cz1',
         ATTACK_CHANNEL_ID: '100000000000000002', ATTACK_ROLE_ID: '100000000000000003',
         ATTACK_STATUS_CHANNEL_ID: '', ATTACK_HTTP_HOST: '127.0.0.1', ATTACK_HTTP_PORT: String(port),

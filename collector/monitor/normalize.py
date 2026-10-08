@@ -18,7 +18,7 @@ def identifier(value, *, allow_negative=False):
     return value
 
 
-def normalize_attack(movement, server_id, expected_alliance_id, metadata=None, now=None):
+def normalize_attack(movement, server_id, expected_alliance_id, metadata=None, now=None, *, include_elapsed=False):
     """Normalize an attack ALREADY classified by get_announced_attacks/callback.
 
     The ordinary is_incoming property only matches our account, so it must
@@ -40,7 +40,7 @@ def normalize_attack(movement, server_id, expected_alliance_id, metadata=None, n
     arrival = movement.estimated_arrival
     if movement.total_time <= 0 or not math.isfinite(arrival):
         arrival = None
-    elif arrival <= now:
+    elif arrival <= now and not include_elapsed:
         return None
     else:
         arrival = math.ceil(arrival)

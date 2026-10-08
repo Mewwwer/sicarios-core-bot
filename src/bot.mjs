@@ -1,3 +1,5 @@
+import { readGameConfig, GameState } from './game-state.mjs';
+import { createGameHandler } from './game-commands.mjs';
 import process from 'node:process';
 import {
   Client,
@@ -24,7 +26,10 @@ if (!TOKEN || !GUILD_ID) {
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const attackMonitor = await startAttackMonitor(client);
+const gameConfig = readGameConfig();
+const gameState = new GameState(gameConfig);
+const handleGame = createGameHandler(gameConfig, gameState);
+const attackMonitor = await startAttackMonitor(client, { gameState: gameConfig.enabled ? gameState : null });
 
 async function getGuild() {
   return client.guilds.fetch(GUILD_ID);
@@ -137,7 +142,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.isChatInputCommand()) {
+    if (interaction.isAutocomplete() || interaction.isChatInputCommand()) {
+      if (await handleGame(interaction)) return;
+      if (interaction.isAutocomplete()) return;
       return handleCommand(interaction, logAction);
     }
   } catch (error) {

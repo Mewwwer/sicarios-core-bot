@@ -1,6 +1,6 @@
 import process from 'node:process';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
-import { COMMANDS } from './commands.mjs';
+import { commandDefinitions } from './commands.mjs';
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
@@ -15,7 +15,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once(Events.ClientReady, async (readyClient) => {
   try {
     const guild = await readyClient.guilds.fetch(GUILD_ID);
-    const data = COMMANDS.map((command) => command.toJSON());
+    const data = commandDefinitions().map((command) => command.toJSON());
     const deployed = await guild.commands.set(data);
     console.log(`[DEPLOY] Registered ${deployed.size} guild commands in ${guild.name}:`);
     for (const command of deployed.values()) console.log(`  /${command.name}`);

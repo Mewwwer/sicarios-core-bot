@@ -33,17 +33,20 @@ class CoreTransport:
                 if len(data) > 32_768:
                     raise DeliveryError('invalid_response')
                 result = json.loads(data)
-                expected = {'accepted'} if path == '/v1/heartbeat' else {'sent', 'sent_dry_run', 'duplicate', 'expired'}
+                expected = {'accepted'} if path in ('/v1/heartbeat', '/v2/state') else {'sent', 'sent_dry_run', 'duplicate', 'expired'}
                 if not isinstance(result, dict) or result.get('result') not in expected:
                     raise DeliveryError('invalid_response')
                 return result
         except error.HTTPError as exc:
             try:
-                retry_after = min(60, max(0, float(exc.headers.get('Retry-After', '0'))))
-            except (ValueError, TypeError):
-                retry_after = 0
-            raise DeliveryError(str(exc.code), permanent=exc.code < 500 and exc.code not in (408, 429),
-                                retry_after=retry_after) from None
+                try:
+                    retry_after = min(60, max(0, float(exc.headers.get('Retry-After', '0'))))
+                except (ValueError, TypeError):
+                    retry_after = 0
+                raise DeliveryError(str(exc.code), permanent=exc.code < 500 and exc.code not in (408, 429),
+                                    retry_after=retry_after) from None
+            finally:
+                exc.close()
         except (error.URLError, TimeoutError, OSError, HTTPException, ValueError):
             # Never include a URL, password, token or raw response in logs.
             raise DeliveryError('network_or_response') from None
