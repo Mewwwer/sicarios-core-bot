@@ -1,4 +1,6 @@
 # Reviewed EmpireCore 0.49.0 source, 2026-10-07. Pin the exact reviewed revision.
+# Mandatory transport backport: run patches/apply_deflate.py after installation.
+# Dockerfile applies and verifies it; provenance and removal rules: patches/README.md.
 empire-core @ https://github.com/eschnitzler/EmpireCore/archive/702f9d26cc65ea6c3b26a03e8ad801b2684f42f3.tar.gz
 annotated-types==0.8.0
 certifi==2026.7.22

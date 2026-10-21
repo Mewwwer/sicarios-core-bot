@@ -4,6 +4,9 @@ Implementace navazuje na `origin/main` `4f82d9efacd9e236bb607fbc69e329c7d41197ef
 Dvě služby, jeden Discord klient a jedna stávající EmpireClient relace. Vše pouze v RAM;
 bez databáze, historie, automatických herních akcí, browseru nebo dalších veřejných portů.
 EmpireCore zůstává 0.49.0, commit `702f9d26cc65ea6c3b26a03e8ad801b2684f42f3`.
+Collector build doplňuje ověřený transportní backport permessage-deflate z upstream
+`f96ab419e79416be1f18f81697bdb22120aea58d`; API ani údaje /obrana nemění.
+[Oprava výpadku a ruční nasazení collectoru](COLLECTOR_DEFLATE_FIX.md).
 
 ## Konfigurace
 
