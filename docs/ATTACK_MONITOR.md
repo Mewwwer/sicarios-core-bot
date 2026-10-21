@@ -69,6 +69,8 @@ V Linux/macOS:
 
 ```sh
 .venv/bin/python -m pip install -r collector/requirements.txt
+.venv/bin/python collector/patches/apply_deflate.py
+.venv/bin/python collector/patches/apply_deflate.py --check
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 npm test
 ```
@@ -77,6 +79,8 @@ Ve Windows:
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -r collector/requirements.txt
+.venv\Scripts\python.exe collector/patches/apply_deflate.py
+.venv\Scripts\python.exe collector/patches/apply_deflate.py --check
 .venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py' -v
 npm test
 ```

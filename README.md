@@ -224,6 +224,11 @@ Synchronizace jazykových access rolí nyní po odebrání starých Recruit/Memb
 
 ## Attack monitor v0.1
 
+Oprava HTTP 400 při WebSocket handshake: collector image obsahuje ověřený backport
+permessage-deflate při zachování EmpireCore 0.49.0. Pro lokální instalaci je po pip install
+nutný krok `python collector/patches/apply_deflate.py`.
+[Validace a ruční nasazení opravy](docs/COLLECTOR_DEFLATE_FIX.md).
+
 - Disabled unless `ATTACK_MONITOR_ENABLED=true`; alert pings remain off unless `ATTACK_DRY_RUN=false`.
 - Python collector reads alliance attack announcements through pinned EmpireCore; it performs no defense or game actions.
 - Authenticated HTTP delivers bilingual cards through the existing Discord client.

@@ -8,6 +8,8 @@ COPY collector/requirements.txt /app/requirements.txt
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
     pip install --no-cache-dir -r requirements.txt
+COPY collector/patches/ /app/patches/
+RUN python patches/apply_deflate.py && python -m pip check
 COPY --chown=collector:collector collector/ /app/
 USER collector
 EXPOSE 8081
